@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const today = new Date()
     const results: any[] = []
 
-    // Bloc current prices
+    // Bloc current prices blindé
     let currentPrices
     try {
       const currentPricesResp = await axios.get(`${COINGECKO_BASE}/simple/price`, {
@@ -31,8 +31,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       currentPrices = currentPricesResp.data
     } catch (err: any) {
-      console.error('❌ currentPrices failed:', err.message)
-      return res.status(500).json({ error: 'currentPrices failed', details: err.message })
+      console.error('❌ currentPrices failed:', err?.response?.status, err?.response?.data || err.message || err)
+      return res.status(500).json({
+        error: 'currentPrices failed',
+        status: err?.response?.status,
+        details: err?.response?.data || err.message || err
+      })
     }
 
     // Boucle par token
@@ -54,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const histPrice = historyResp.data?.market_data?.current_price?.[vs_currency]
           prices[`price_${day}d`] = histPrice ?? null
         } catch (err: any) {
-          console.warn(`⚠️ history fetch failed for ${id} (${day}d):`, err.message)
+          console.warn(`⚠️ history fetch failed for ${id} (${day}d):`, err?.message || err)
           prices[`price_${day}d`] = null
         }
       }
@@ -70,8 +74,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate')
     return res.status(200).json(results)
   } catch (err: any) {
-    console.error('🔥 Unexpected server crash:', err.message)
-    return res.status(500).json({ error: 'Internal server error', details: err.message })
+    console.error('🔥 Unexpected crash:', err?.message || err)
+    return res.status(500).json({
+      error: 'Unexpected server error',
+      details: err?.message || err
+    })
   }
 }
 
