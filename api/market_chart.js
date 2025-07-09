@@ -1,45 +1,47 @@
-// =========================
-// market_chart.js (Vercel API Proxy)
-// =========================
+// pages/api/market_chart.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
 
-import { NextResponse } from 'next/server';
-import fetch from 'node-fetch';
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const ids = req.query.ids
+  const days = req.query.days || '7'
 
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req) {
-  const { searchParams } = new URL(req.url);
-  const ids = searchParams.get('ids');
-  const days = searchParams.get('days');
-
-  if (!ids || !days) {
-    return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+  if (!ids || typeof ids !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid ids parameter' })
   }
 
-  const idList = ids.split(',');
-  const result = {};
+  const idList = ids.split(',').map((id) => id.trim().toLowerCase())
+  const result: Record<string, number[][] | null> = {}
 
   for (const id of idList) {
+    const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`
+
     try {
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`,
-        {
-          headers: {
-            'User-Agent': 'UndefinedUser',
-          },
-        }
-      );
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'RelativeStrengthMatrixBot/1.0 (contact: undefinedUser)',
+        },
+      })
 
-      if (!res.ok) throw new Error(`CoinGecko error ${res.status}`);
+      if (!response.ok) {
+        console.warn(`Erreur CoinGecko ${response.status} pour ${id}`)
+        result[id] = null
+        continue
+      }
 
-      const json = await res.json();
-      result[id] = json.prices;
+      const json = await response.json()
+      result[id] = json.prices || null
+
+      // Petit delay pour respecter les limites d’appel API CoinGecko
+      await new Promise((resolve) => setTimeout(resolve, 1250))
     } catch (e) {
-      result[id] = null;
+      console.error(`Exception pour ${id} :`, e)
+      result[id] = null
     }
   }
 
-  return NextResponse.json({ prices: result });
+  res.setHeader('Cache-Control', 'no-store')
+  res.status(200).json(result)
 }
