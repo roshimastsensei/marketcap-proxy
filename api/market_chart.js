@@ -1,4 +1,3 @@
-// Vercel Edge Function
 import { VercelRequest, VercelResponse } from '@vercel/node'
 import axios from 'axios'
 
@@ -9,28 +8,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { ids, days, vs_currency = 'usd' } = req.query
 
     if (!ids || !days) {
+      console.error('❌ Missing parameters: ids or days')
       return res.status(400).json({ error: 'Missing required parameters: ids, days' })
     }
 
     const idList = Array.isArray(ids) ? ids : ids.split(',')
-    const dayList = Array.isArray(days) ? days : days.split(',').map(Number)
+    const dayList = Array.isArray(days) ? days.map(Number) : days.split(',').map(Number)
+
+    console.log('✅ Proxy called with:', { ids: idList, days: dayList })
 
     const today = new Date()
     const results: any[] = []
 
-    // 1. Get current prices
-    const currentPricesResp = await axios.get(`${COINGECKO_BASE}/simple/price`, {
-      params: {
-        ids: idList.join(','),
-        vs_currencies: vs_currency
-      }
-    })
+    // Bloc current prices
+    let currentPrices
+    try {
+      const currentPricesResp = await axios.get(`${COINGECKO_BASE}/simple/price`, {
+        params: {
+          ids: idList.join(','),
+          vs_currencies: vs_currency
+        }
+      })
+      currentPrices = currentPricesResp.data
+    } catch (err: any) {
+      console.error('❌ currentPrices failed:', err.message)
+      return res.status(500).json({ error: 'currentPrices failed', details: err.message })
+    }
 
-    const currentPrices = currentPricesResp.data
-
-    // 2. Get historical prices
+    // Boucle par token
     for (const id of idList) {
-      const prices: Record<string, number> = {}
+      const prices: Record<string, number | null> = {}
 
       for (const day of dayList) {
         const date = new Date(today)
@@ -44,9 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const historyResp = await axios.get(`${COINGECKO_BASE}/coins/${id}/history`, {
             params: { date: formattedDate, localization: 'false' }
           })
-
-          prices[`price_${day}d`] = historyResp.data?.market_data?.current_price?.[vs_currency] ?? null
-        } catch (err) {
+          const histPrice = historyResp.data?.market_data?.current_price?.[vs_currency]
+          prices[`price_${day}d`] = histPrice ?? null
+        } catch (err: any) {
+          console.warn(`⚠️ history fetch failed for ${id} (${day}d):`, err.message)
           prices[`price_${day}d`] = null
         }
       }
@@ -58,10 +66,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
+    console.log('✅ Sending final JSON response')
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate')
     return res.status(200).json(results)
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message ?? 'Internal server error' })
+  } catch (err: any) {
+    console.error('🔥 Unexpected server crash:', err.message)
+    return res.status(500).json({ error: 'Internal server error', details: err.message })
   }
 }
 
