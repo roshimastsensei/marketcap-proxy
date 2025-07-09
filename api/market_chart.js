@@ -1,47 +1,46 @@
-// pages/api/market_chart.ts
-import type { NextApiRequest, NextApiResponse } from 'next'
+// /api/market_chart.ts
+import { NextRequest } from "next/server";
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  const ids = req.query.ids
-  const days = req.query.days || '7'
+export const config = {
+  runtime: "edge",
+};
 
-  if (!ids || typeof ids !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid ids parameter' })
+export default async function handler(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const idsParam = searchParams.get("ids");
+  const days = searchParams.get("days") ?? "7";
+
+  if (!idsParam) {
+    return new Response(JSON.stringify({ error: "Missing parameter: ids" }), { status: 400 });
   }
 
-  const idList = ids.split(',').map((id) => id.trim().toLowerCase())
-  const result: Record<string, number[][] | null> = {}
+  const ids = idsParam.split(",");
 
-  for (const id of idList) {
-    const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`
+  const headers = {
+    "User-Agent": "UndefinedUser-Agent",
+  };
 
+  const results: Record<string, any> = {};
+
+  for (const id of ids) {
     try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'RelativeStrengthMatrixBot/1.0 (contact: undefinedUser)',
-        },
-      })
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}&interval=daily`,
+        { headers }
+      );
 
-      if (!response.ok) {
-        console.warn(`Erreur CoinGecko ${response.status} pour ${id}`)
-        result[id] = null
-        continue
+      if (!res.ok) {
+        throw new Error(`❌ ${id}: ${res.status}`);
       }
 
-      const json = await response.json()
-      result[id] = json.prices || null
-
-      // Petit delay pour respecter les limites d’appel API CoinGecko
-      await new Promise((resolve) => setTimeout(resolve, 1250))
-    } catch (e) {
-      console.error(`Exception pour ${id} :`, e)
-      result[id] = null
+      const data = await res.json();
+      results[id] = data.prices;
+    } catch (err: any) {
+      results[id] = { error: err.message || "unknown error" };
     }
   }
 
-  res.setHeader('Cache-Control', 'no-store')
-  res.status(200).json(result)
+  return new Response(JSON.stringify(results), {
+    headers: { "Content-Type": "application/json" },
+  });
 }
