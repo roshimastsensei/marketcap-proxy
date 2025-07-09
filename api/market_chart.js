@@ -1,11 +1,10 @@
 // /api/market_chart.ts
-import { NextRequest } from "next/server";
 
 export const config = {
   runtime: "edge",
 };
 
-export default async function handler(req: NextRequest) {
+export default async function handler(req) {
   const { searchParams } = new URL(req.url);
   const idsParam = searchParams.get("ids");
   const days = searchParams.get("days") ?? "7";
@@ -20,7 +19,7 @@ export default async function handler(req: NextRequest) {
     "User-Agent": "UndefinedUser-Agent",
   };
 
-  const results: Record<string, any> = {};
+  const results = {};
 
   for (const id of ids) {
     try {
@@ -35,7 +34,7 @@ export default async function handler(req: NextRequest) {
 
       const data = await res.json();
       results[id] = data.prices;
-    } catch (err: any) {
+    } catch (err) {
       results[id] = { error: err.message || "unknown error" };
     }
   }
@@ -44,3 +43,4 @@ export default async function handler(req: NextRequest) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
