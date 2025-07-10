@@ -4,21 +4,14 @@
     {
       "src": "api/marketcap.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "api/market_chart.js",
-      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/api/marketcap",
       "dest": "api/marketcap.js"
-    },
-    {
-      "src": "/api/market_chart",
-      "dest": "api/market_chart.js"
     }
   ]
 }
+
 
